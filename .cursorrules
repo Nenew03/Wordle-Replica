@@ -4,7 +4,6 @@
 - Hosting target: Netlify (static)
 - Never try to start the app itself (I have it running in a separate terminal)
 - Before making changes, review Lessons section of `Docs/Context/briefing.md` for known pitfalls in this codebase
-
 ## Project Context
 - Current product spec: `Docs/Context/briefing.md`
 - Current feature map: `Docs/Context/feature_map.md`

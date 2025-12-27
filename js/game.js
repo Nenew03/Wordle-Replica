@@ -13,7 +13,10 @@ const state = {
   letterStatus: new Map(),
   gameOver: false,
   won: false,
+  streaks: { 5: 0, 6: 0, 7: 0, 8: 0 }, // UI-006: Session streak counters
 };
+
+const DEFINITION_CACHE = new Map();
 
 function getWordsData() {
   // words.js should define window.WORDS; fallback to empty object.
@@ -24,32 +27,14 @@ function getWordsData() {
 /** @type {Record<number, {answers: string[], valid: string[]}>} */
 const WORDS = getWordsData();
 
-/** @type {Record<number, Set<string>>} */
-const VALID_SET_BY_LENGTH = {};
-
-function rebuildValidSets() {
-  for (const len of [5, 6, 7, 8]) {
-    const answers = WORDS?.[len]?.answers;
-    const valid = WORDS?.[len]?.valid;
-
-    const set = new Set();
-    if (Array.isArray(answers)) {
-      for (const w of answers) set.add(String(w).toUpperCase());
-    }
-    if (Array.isArray(valid)) {
-      for (const w of valid) set.add(String(w).toUpperCase());
-    }
-
-    VALID_SET_BY_LENGTH[len] = set;
-  }
-}
-
-rebuildValidSets();
-
 function clampWordLength(n) {
   const next = Number(n);
   if (!Number.isFinite(next)) return 5;
   return Math.min(8, Math.max(5, Math.trunc(next)));
+}
+
+function getMaxTries(wordLength) {
+  return wordLength <= 6 ? 6 : wordLength;
 }
 
 function getStatusEl() {
@@ -62,6 +47,12 @@ function getPlayAgainEl() {
   const el = document.getElementById("play-again");
   if (!el) throw new Error("Missing #play-again element");
   return /** @type {HTMLButtonElement} */ (el);
+}
+
+function getHintEl() {
+  const el = document.getElementById("hint-container");
+  if (!el) throw new Error("Missing #hint-container element");
+  return el;
 }
 
 let statusTimer = /** @type {number | null} */ (null);
@@ -96,6 +87,53 @@ function clearStatus() {
     window.clearTimeout(statusTimer);
     statusTimer = null;
   }
+}
+
+async function fetchDefinition(word) {
+  const w = word.toLowerCase();
+  if (DEFINITION_CACHE.has(w)) return DEFINITION_CACHE.get(w);
+
+  try {
+    const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${w}`);
+    if (!response.ok) throw new Error("Not found");
+    const data = await response.json();
+    const entry = data[0]?.meanings[0]?.definitions[0];
+    const result = {
+      definition: entry?.definition || "No definition found.",
+      example: entry?.example || null,
+    };
+    DEFINITION_CACHE.set(w, result);
+    return result;
+  } catch (err) {
+    console.error("Failed to fetch definition:", err);
+    return { definition: "Definition unavailable.", example: null };
+  }
+}
+
+async function showHint() {
+  const hintEl = getHintEl();
+  const { definition } = await fetchDefinition(state.targetWord);
+  hintEl.innerHTML = `<span class="hint-label">Hint</span>${definition}`;
+  hintEl.hidden = false;
+}
+
+function getDetailsEl() {
+  const el = document.getElementById("details-container");
+  if (!el) throw new Error("Missing #details-container element");
+  return el;
+}
+
+async function showGameEndDetails(word) {
+  const detailsEl = getDetailsEl();
+  const { definition, example } = await fetchDefinition(word);
+
+  let html = `<span class="details-word">${word}</span>: ${definition}`;
+  if (example) {
+    html += `<span class="details-example">Example: "${example}"</span>`;
+  }
+
+  detailsEl.innerHTML = html;
+  detailsEl.hidden = false;
 }
 
 function getKeyboardEl() {
@@ -222,13 +260,19 @@ function renderKeyboardColors() {
 function renderBoard() {
   const boardEl = getBoardEl();
 
-  // Keep CSS var in sync (used by grid template + tile-size)
+  // Dynamic gap: smaller for 7-8 letters to save space on mobile
+  const gap = state.wordLength > 6 ? 4 : 6;
+
+  // Keep CSS vars in sync (used by grid template + responsive sizing)
   boardEl.style.setProperty("--word-length", String(state.wordLength));
+  boardEl.style.setProperty("--gap", `${gap}px`);
 
   // Simple MVP: rerender all tiles
   boardEl.innerHTML = "";
 
-  for (let r = 0; r < 6; r++) {
+  const maxTries = getMaxTries(state.wordLength);
+
+  for (let r = 0; r < maxTries; r++) {
     const isSubmitted = r < state.guesses.length;
     const isActive = r === state.guesses.length;
 
@@ -261,6 +305,28 @@ function renderBoard() {
   }
 }
 
+function renderStreaks() {
+  const container = document.getElementById("streaks-container");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  for (const length of [5, 6, 7, 8]) {
+    const streakValue = state.streaks[length];
+    const isCurrent = length === state.wordLength;
+
+    const item = document.createElement("div");
+    item.className = `streak-item${isCurrent ? " current" : ""}`;
+
+    item.innerHTML = `
+      <div class="streak-label">${length}-letter</div>
+      <div class="streak-length">${streakValue}</div>
+    `;
+
+    container.appendChild(item);
+  }
+}
+
 function pickRandomTargetWord(length) {
   const n = clampWordLength(length);
   const answers = WORDS?.[n]?.answers;
@@ -269,16 +335,6 @@ function pickRandomTargetWord(length) {
     return "CRANE".slice(0, n).padEnd(n, "A");
   }
   return String(list[Math.floor(Math.random() * list.length)]).toUpperCase();
-}
-
-function isValidGuessWord(word) {
-  const w = String(word).toUpperCase();
-  const set = VALID_SET_BY_LENGTH[state.wordLength];
-  if (!set || set.size === 0) {
-    // If no list loaded, don't hard-block guesses (keeps MVP usable while lists are small/being expanded).
-    return true;
-  }
-  return set.has(w);
 }
 
 function getLengthSelectorEl() {
@@ -307,6 +363,8 @@ function newGame() {
   state.won = false;
   clearStatus();
   getPlayAgainEl().hidden = true;
+  getHintEl().hidden = true;
+  getDetailsEl().hidden = true;
   renderBoard();
   renderKeyboardColors();
   syncLengthSelectorUI();
@@ -322,7 +380,7 @@ function setWordLength(nextLength) {
 function addLetter(letter) {
   if (state.gameOver) return;
   if (!letter || state.currentGuess.length >= state.wordLength) return;
-  if (state.guesses.length >= 6) return;
+  if (state.guesses.length >= getMaxTries(state.wordLength)) return;
   const ch = String(letter).toUpperCase();
   if (!/^[A-Z]$/.test(ch)) return;
   state.currentGuess += ch;
@@ -336,13 +394,29 @@ function deleteLetter() {
   renderBoard();
 }
 
+function isReasonableGuess(guess) {
+  const word = guess.toUpperCase();
+
+  // Reject words with no vowels (too obvious)
+  if (!/[AEIOU]/.test(word)) return false;
+
+  // Reject words with 5+ consecutive consonants (very unlikely in English)
+  if (/[^AEIOU]{5,}/.test(word)) return false;
+
+  // Reject words with 4+ consecutive vowels (very rare)
+  if (/[AEIOU]{4,}/.test(word)) return false;
+
+  return true;
+}
+
 function submitGuess() {
   if (state.gameOver) return;
-  if (state.guesses.length >= 6) return;
+  if (state.guesses.length >= getMaxTries(state.wordLength)) return;
   if (state.currentGuess.length !== state.wordLength) return;
 
-  if (!isValidGuessWord(state.currentGuess)) {
-    setStatus("Not in word list", "error", 1200);
+  // Basic pattern validation
+  if (!isReasonableGuess(state.currentGuess)) {
+    setStatus("Please enter a more realistic word combination", "error");
     return;
   }
 
@@ -360,15 +434,32 @@ function submitGuess() {
     state.gameOver = true;
     state.won = true;
     setStatus("You win!", "success");
+    showGameEndDetails(state.targetWord);
     getPlayAgainEl().hidden = false;
     return;
   }
 
-  if (state.guesses.length >= 6) {
+  if (state.guesses.length >= getMaxTries(state.wordLength)) {
     state.gameOver = true;
     state.won = false;
     setStatus(`You lose. The word was ${state.targetWord}.`, "info");
+    showGameEndDetails(state.targetWord);
     getPlayAgainEl().hidden = false;
+  }
+
+  // UI-006: Update streaks based on win/loss
+  if (state.gameOver) {
+    if (state.won) {
+      state.streaks[state.wordLength]++;
+    } else {
+      state.streaks[state.wordLength] = 0;
+    }
+    renderStreaks();
+  }
+
+  // Trigger hint after 4th failed guess
+  if (state.guesses.length === 4 && !state.gameOver) {
+    showHint();
   }
 }
 
@@ -425,6 +516,7 @@ window.__wordleState = state;
 
 // Initial paint
 renderKeyboard();
+renderStreaks();
 newGame();
 
 // Play again

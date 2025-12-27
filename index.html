@@ -33,8 +33,14 @@
 
       <section class="status-wrap" aria-label="Game status">
         <div id="status" class="status" role="status" aria-live="polite"></div>
+        <div id="hint-container" class="hint-box" hidden aria-live="polite"></div>
+        <div id="details-container" class="details-box" hidden aria-live="polite"></div>
         <button id="play-again" type="button" class="play-again" hidden>Play Again</button>
       </section>
+
+      <aside id="streaks-container" class="streaks-container" aria-label="Session streaks">
+        <!-- To be populated by JS -->
+      </aside>
 
       <footer class="footer">
         <p class="hint">

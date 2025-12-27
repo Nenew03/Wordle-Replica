@@ -1,13 +1,12 @@
 # Wordle — Technical Architecture
 
 **Project:** Wordle
-**Version:** 2.0
-**Last Updated:** 2025-12-28
-**Briefing Reference:** `Docs/Context/briefing.md` (v2)
-**Feature Map Reference:** `Docs/Context/feature_map.md` (v2)
+**Version:** 1.0
+**Last Updated:** 2025-12-27
+**Briefing Reference:** `docs/context/briefing_Wordle.md` (v1)
+**Feature Map Reference:** `docs/context/feature_map_Wordle.md` (v1)
 
 ## Changelog
-- **v2 (2025-12-28):** Added responsive layout fixes for 7-8 letter words, dynamic max tries logic, dictionary API integration, definition display components
 - **v1 (2025-12-27):** Initial architecture
 
 ---
@@ -19,7 +18,6 @@
 | Frontend | Vanilla HTML/CSS/JS | No build step, beginner-friendly, fast |
 | Styling | CSS3 (Flexbox/Grid) | Mobile-first responsive layout |
 | Data | Static JS arrays | Word lists bundled in code |
-| API | Free Dictionary API | Word definitions & examples (v2) |
 | Hosting | Netlify | Free static hosting with drag-drop deploy |
 
 **Why this stack:**
@@ -108,10 +106,7 @@ const gameState = {
   currentGuess: "",        // Current typing buffer
   gameOver: false,         // Is game ended?
   won: false,              // Did player win?
-  letterStatus: {},        // Map of letter -> best color status
-  maxTries: 6,             // Dynamic: based on word length (NEW in v2)
-  definition: null,        // Cached definition data (NEW in v2)
-  hintShown: false         // Whether definition hint shown (NEW in v2)
+  letterStatus: {}         // Map of letter -> best color status
 };
 ```
 
@@ -292,11 +287,11 @@ keyboard.addEventListener('click', (e) => {
 
 | File | Target Size | Notes |
 |------|-------------|-------|
-| index.html | <6 KB | Minimal markup + definition elements (v2) |
-| style.css | <12 KB | Mobile-first + definition styling (v2) |
-| game.js | <15 KB | Core logic + API integration (v2) |
+| index.html | <5 KB | Minimal markup |
+| style.css | <10 KB | Mobile-first, no framework |
+| game.js | <10 KB | Core logic |
 | words.js | <400 KB | All word lists |
-| **Total** | <433 KB | Fast load on mobile; definitions fetched on-demand |
+| **Total** | <425 KB | Fast load on mobile |
 
 ---
 
@@ -306,319 +301,16 @@ keyboard.addEventListener('click', (e) => {
 |------|------------|--------|------------|
 | Word lists too large | Low | Medium | Use gzip (Netlify auto-compresses); lazy-load if needed |
 | Duplicate letter logic wrong | Medium | High | Write unit tests for edge cases; test with APPLE/PAPER |
-| Touch targets too small | Medium | Medium | Use min 44px for tiles, 32px+ for keys; adjust for 7-8 letter words (v2) |
+| Touch targets too small | Medium | Medium | Use min 44px for tiles, 32px+ for keys |
 | Keyboard covers game on mobile | Medium | Low | Test on real device; use viewport-fit |
-| Dictionary API unavailable | Low | Medium | Cache definitions; graceful fallback message; game still playable (v2) |
-| API rate limiting | Low | Low | Cache all definitions; minimal calls (1-2 per game) (v2) |
-| Word not in dictionary | Medium | Low | Show fallback message "Definition not available" (v2) |
-| 7-8 letter words overflow screen | High | High | Adjust tile size calculation; reduce gaps; test on 320px width (v2) |
-
----
-
-## Dynamic Max Tries Logic (NEW in v2)
-
-```javascript
-function getMaxTries(wordLength) {
-  // 5-6 letter words: 6 tries
-  // 7 letter words: 7 tries
-  // 8 letter words: 8 tries
-  return wordLength <= 6 ? 6 : wordLength;
-}
-
-function newGame() {
-  // ... existing logic ...
-  state.maxTries = getMaxTries(state.wordLength);
-  // Update board rendering to use state.maxTries instead of hardcoded 6
-}
-
-function renderBoard() {
-  // Loop from 0 to state.maxTries (instead of hardcoded 6)
-  for (let r = 0; r < state.maxTries; r++) {
-    // ... tile rendering ...
-  }
-}
-
-function submitGuess() {
-  // ... validation logic ...
-  
-  // Check for lose condition using dynamic max
-  if (state.guesses.length >= state.maxTries) {
-    state.gameOver = true;
-    state.won = false;
-    // ... show definition and lose message ...
-  }
-}
-```
-
----
-
-## Dictionary API Integration (NEW in v2)
-
-### API Details
-- **Provider:** Free Dictionary API
-- **Endpoint:** `https://api.dictionaryapi.dev/api/v2/entries/en/{word}`
-- **Cost:** Free, no API key required
-- **Rate limits:** Generous for personal use
-- **Response format:** JSON
-
-### Response Structure
-```json
-[
-  {
-    "word": "crane",
-    "meanings": [
-      {
-        "partOfSpeech": "noun",
-        "definitions": [
-          {
-            "definition": "A large bird with long legs and neck",
-            "example": "The crane stood in the shallow water."
-          }
-        ]
-      }
-    ]
-  }
-]
-```
-
-### Implementation
-
-```javascript
-// Cache to avoid duplicate API calls
-const definitionCache = new Map();
-
-async function fetchDefinition(word) {
-  const normalized = word.toLowerCase();
-  
-  // Check cache first
-  if (definitionCache.has(normalized)) {
-    return definitionCache.get(normalized);
-  }
-  
-  try {
-    const response = await fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${normalized}`
-    );
-    
-    if (!response.ok) {
-      throw new Error('Word not found');
-    }
-    
-    const data = await response.json();
-    const firstMeaning = data[0]?.meanings?.[0];
-    const firstDef = firstMeaning?.definitions?.[0];
-    
-    const result = {
-      definition: firstDef?.definition || 'Definition not available',
-      example: firstDef?.example || '',
-      partOfSpeech: firstMeaning?.partOfSpeech || ''
-    };
-    
-    // Cache the result
-    definitionCache.set(normalized, result);
-    return result;
-    
-  } catch (error) {
-    // Fallback for words not in dictionary
-    const fallback = {
-      definition: 'Definition not available',
-      example: '',
-      partOfSpeech: ''
-    };
-    definitionCache.set(normalized, fallback);
-    return fallback;
-  }
-}
-
-// Usage: Show definition after 4th try
-async function checkAndShowHint() {
-  if (state.guesses.length === 4 && !state.won && !state.hintShown) {
-    const def = await fetchDefinition(state.targetWord);
-    displayHint(def.definition);
-    state.hintShown = true;
-  }
-}
-
-// Usage: Show definition on game end
-async function showGameEndDefinition() {
-  const def = await fetchDefinition(state.targetWord);
-  displayDefinition(def.definition, def.example);
-}
-```
-
----
-
-## Responsive Layout Fix for 7-8 Letter Words (NEW in v2)
-
-### Problem
-Current `--tile-size` calculation:
-```css
---tile-size: clamp(44px, calc((100vw - 48px) / var(--word-length)), 62px);
-```
-
-For 8-letter words on narrow screens (320px):
-- Available width: 320px - 48px = 272px
-- Per tile: 272px / 8 = 34px
-- With gaps (7 × 6px = 42px): 272px - 42px = 230px / 8 = 28.75px per tile
-- Result: Too small, fails accessibility
-
-### Solution
-Adjust tile size calculation and gap dynamically:
-
-```css
-:root {
-  --word-length: 5;
-  --gap: calc(6px - (var(--word-length) - 5) * 1px); /* Smaller gaps for longer words */
-  --tile-size: clamp(
-    36px,  /* Reduced min from 44px for longer words */
-    calc((100vw - 40px - (var(--word-length) - 1) * var(--gap)) / var(--word-length)),
-    62px
-  );
-}
-```
-
-Alternative: Use media query to reduce font size for 7-8 letter words:
-
-```css
-@media (max-width: 400px) {
-  .board[style*="--word-length: 7"],
-  .board[style*="--word-length: 8"] {
-    --tile-size: clamp(32px, calc((100vw - 32px) / var(--word-length)), 52px);
-    --gap: 4px;
-  }
-  
-  .tile {
-    font-size: calc(var(--tile-size) * 0.48); /* Smaller font for readability */
-  }
-}
-```
-
----
-
-## UI Components for Definitions (NEW in v2)
-
-### HTML Structure
-```html
-<!-- Add to index.html -->
-<div class="hint-wrap" id="hint-wrap" hidden>
-  <div class="hint-box">
-    <strong>Hint:</strong>
-    <p id="hint-text"></p>
-  </div>
-</div>
-
-<div class="definition-wrap" id="definition-wrap" hidden>
-  <div class="definition-box">
-    <h3 id="definition-word"></h3>
-    <p class="definition-text" id="definition-text"></p>
-    <p class="example-text" id="example-text"></p>
-  </div>
-</div>
-```
-
-### CSS Styling
-```css
-.hint-box {
-  background: #fff3cd;
-  border: 2px solid #ffc107;
-  border-radius: 8px;
-  padding: 12px;
-  margin: 12px 0;
-  max-width: 520px;
-}
-
-.hint-box strong {
-  color: #856404;
-}
-
-.definition-box {
-  background: #f8f9fa;
-  border: 2px solid var(--color-empty-border);
-  border-radius: 8px;
-  padding: 16px;
-  margin: 16px 0;
-  max-width: 520px;
-  text-align: left;
-}
-
-.definition-text {
-  font-size: 14px;
-  margin: 8px 0;
-  line-height: 1.5;
-}
-
-.example-text {
-  font-size: 13px;
-  font-style: italic;
-  color: #555;
-  margin: 8px 0;
-}
-```
-
----
-
-## Updated Event Flow (v2)
-
-### Submit Guess Flow (Updated)
-1. Player presses Enter
-2. `submitGuess()` validates length (relaxed word validation in v2)
-3. Evaluate guess and update board
-4. **NEW:** Check if `guesses.length === 4` → fetch and show definition hint
-5. Check win condition
-6. Check lose condition (using `state.maxTries`)
-7. If game ended:
-   - **NEW:** Fetch full definition + example
-   - **NEW:** Display definition box
-   - Show "Play Again" button
-
-### New Game Flow (Updated)
-1. Player selects word length
-2. `setWordLength()` → `newGame()`
-3. Calculate `state.maxTries = getMaxTries(wordLength)`
-4. Pick random word from answer list
-5. **NEW:** Clear definition cache for previous word
-6. **NEW:** Reset `state.hintShown = false`
-7. Render board with `state.maxTries` rows
-8. Render keyboard and UI
-
----
-
-## Relaxed Validation Strategy (NEW in v2)
-
-### Changes
-- Remove strict word list validation
-- Accept any input of correct length
-- Still use curated word lists for answer selection
-
-### Code Changes
-```javascript
-function isValidGuessWord(word) {
-  // v2: Accept all inputs - removed validation
-  return true;
-  
-  // v1 code (commented out):
-  // const w = String(word).toUpperCase();
-  // const set = VALID_SET_BY_LENGTH[state.wordLength];
-  // return set.has(w);
-}
-```
-
-### Benefits
-- Improved playability (no frustrating rejections)
-- Players can experiment with letter combinations
-- Particularly helpful for 7-8 letter words (limited vocabulary)
-- Still maintains educational value through definitions
 
 ---
 
 ## What's NOT in This Architecture
 
 Handled by external systems or deferred:
-- **Backend server:** Not needed — fully client-side (except external Dictionary API)
+- **Backend server:** Not needed — fully client-side
 - **Database:** Not needed — no persistence
 - **Authentication:** Not needed — no users
 - **Analytics:** Could add Netlify Analytics later (free tier)
-- **PWA/Service Worker:** Deferred — not V2
-- **Custom dictionary:** Using Free Dictionary API; not building own definitions database
-- **Definition editing:** Read-only from API; no custom definitions
-- **Offline definitions:** Requires caching strategy; deferred post-V2
+- **PWA/Service Worker:** Deferred — not MVP
