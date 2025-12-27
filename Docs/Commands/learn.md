@@ -1,0 +1,2 @@
+What issue did we just solve? Suggest a .cursorrules addition to prevent this in the future. and record it in Lessons section of the briefing.md file
+Review our recent chat history. What recurring mistakes or clarifications could be prevented with new .cursorrules entries? Record suggestion in record it in Lessons section of the briefing.md file, and try to consolidate and update previous lesson as appropriate. Would be great to quantify the frequency and severity of any particular issue for me to evaluate need to incorporate into .cursorrules

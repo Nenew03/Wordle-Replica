@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wordle</title>
+    <link rel="stylesheet" href="./css/style.css" />
+    <script src="./js/words.js" defer></script>
+    <script src="./js/game.js" defer></script>
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <h1 class="title">Wordle</h1>
+      </header>
+
+      <nav class="length-selector" aria-label="Word length selector">
+        <button type="button" class="length-btn active" data-length="5" aria-pressed="true">
+          5
+        </button>
+        <button type="button" class="length-btn" data-length="6" aria-pressed="false">6</button>
+        <button type="button" class="length-btn" data-length="7" aria-pressed="false">7</button>
+        <button type="button" class="length-btn" data-length="8" aria-pressed="false">8</button>
+      </nav>
+
+      <section class="board-wrap" aria-label="Game board">
+        <div id="board" class="board" role="grid" aria-label="Wordle board"></div>
+      </section>
+
+      <section class="keyboard-wrap" aria-label="On-screen keyboard">
+        <div id="keyboard" class="keyboard" aria-label="Keyboard"></div>
+      </section>
+
+      <section class="status-wrap" aria-label="Game status">
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+        <button id="play-again" type="button" class="play-again" hidden>Play Again</button>
+      </section>
+
+      <footer class="footer">
+        <p class="hint">
+          Type letters, use Backspace, press Enter to submit. (For testing,
+          call <code>setWordLength(5..8)</code> in the console.)
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>
+
